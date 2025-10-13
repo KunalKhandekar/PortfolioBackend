@@ -1,15 +1,19 @@
 import express from "express";
 import mongoose from "mongoose";
 import authRoutes from "./routes/authRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
+import cookieParser from "cookie-parser";
 
 const app = express();
 app.use(express.json());
+app.use(cookieParser(process.env.COOKIE_SECRECT));
 
 app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.get("/", (req, res) => {
-    res.json({ message: "Hello World !!" })
-})
+  res.json({ message: "Hello World !!" });
+});
 
 mongoose
   .connect(process.env.MONGODB_URI)
