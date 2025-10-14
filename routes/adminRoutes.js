@@ -3,6 +3,7 @@ import { verifyAdmin } from "../middlewares/checkAuth.js";
 import Owner from "../models/ownerModel.js";
 import mongoose, { Schema } from "mongoose";
 import Blog from "../models/BlogModel.js";
+import Experience from "../models/ExperienceModel.js";
 
 const adminRouter = Router();
 const _id = process.env.ADMIN_ID;
@@ -350,6 +351,183 @@ adminRouter.get("/blog", verifyAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error("Error getting blogs data: ", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
+// Experience Route
+adminRouter.post("/experience", verifyAdmin, async (req, res) => {
+  try {
+    const {
+      companyLogo,
+      title,
+      location,
+      timeLine,
+      isCurrent,
+      keyAchievements,
+      technologiesUsed,
+    } = req.body || {};
+
+    const requiredFields = {
+      companyLogo,
+      title,
+      location,
+      timeLine,
+      isCurrent,
+      keyAchievements,
+      technologiesUsed,
+    };
+
+    const missingFields = Object.entries(requiredFields)
+      .filter(([key, value]) => value === undefined || value === null)
+      .map(([key]) => key);
+
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Missing required fields: ${missingFields.join(", ")}`,
+      });
+    }
+
+    if (!validateStringArray(keyAchievements)) {
+      return res.status(400).json({
+        success: false,
+        message: "keyAchievements must be an array of non-empty strings",
+      });
+    }
+
+    if (!validateStringArray(technologiesUsed)) {
+      return res.status(400).json({
+        success: false,
+        message: "technologiesUsed must be an array of non-empty strings",
+      });
+    }
+
+    const experience = await Experience.create({
+      companyLogo,
+      title,
+      location,
+      timeLine,
+      isCurrent,
+      keyAchievements,
+      technologiesUsed,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "New experience added successfully",
+      data: experience,
+    });
+  } catch (error) {
+    console.error("Error creating experience: ", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
+adminRouter.patch("/experience/:id", verifyAdmin, async (req, res) => {
+  try {
+    const {
+      companyLogo,
+      title,
+      location,
+      timeLine,
+      isCurrent,
+      keyAchievements,
+      technologiesUsed,
+    } = req.body || {};
+
+    const { id } = req.params;
+    const updateData = {};
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid experience ID",
+      });
+    }
+
+    if (companyLogo) updateData.companyLogo = companyLogo;
+    if (title) updateData.title = title;
+    if (location) updateData.location = location;
+    if (timeLine) updateData.timeLine = timeLine;
+    if (isCurrent !== undefined && isCurrent !== null) {
+      updateData.isCurrent = isCurrent;
+    }
+    if (keyAchievements) {
+      if (!validateStringArray(keyAchievements)) {
+        return res.status(400).json({
+          success: false,
+          message: "keyAchievements must be an array of non-empty strings",
+        });
+      }
+      updateData.keyAchievements = keyAchievements;
+    }
+    if (technologiesUsed) {
+      if (!validateStringArray(technologiesUsed)) {
+        return res.status(400).json({
+          success: false,
+          message: "technologiesUsed must be an array of non-empty strings",
+        });
+      }
+      updateData.technologiesUsed = technologiesUsed;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid fields provided to update",
+      });
+    }
+
+    const updatedExperience = await Experience.findByIdAndUpdate(
+      id,
+      updateData,
+      {
+        new: true,
+      }
+    );
+
+    if (!updatedExperience) {
+      return res.status(404).json({
+        success: false,
+        message: "Experience data not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Experience data updated successfully",
+      data: updatedExperience,
+    });
+  } catch (error) {
+    console.error("Error updating experience data: ", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
+adminRouter.get("/experience", async (req, res) => {
+  try {
+    const experiences = await Experience.find({}).lean();
+
+    return res.status(200).json({
+      success: true,
+      message:
+        experiences.length > 0
+          ? "Experience data fetched successfully"
+          : "No experience data found",
+      data: experiences,
+    });
+  } catch (error) {
+    console.error("Error getting experience data: ", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
