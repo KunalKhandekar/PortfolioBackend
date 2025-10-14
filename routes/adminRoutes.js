@@ -1,12 +1,15 @@
 import { Router } from "express";
 import { verifyAdmin } from "../middlewares/checkAuth.js";
 import Owner from "../models/ownerModel.js";
-import mongoose from "mongoose";
+import mongoose, { Schema } from "mongoose";
+import Blog from "../models/BlogModel.js";
 
 const adminRouter = Router();
 const _id = process.env.ADMIN_ID;
 const validateStringArray = (arr) =>
-  Array.isArray(arr) && !arr.some((s) => typeof s !== "string" || !s.trim()) && arr.length !== 0;
+  Array.isArray(arr) &&
+  !arr.some((s) => typeof s !== "string" || !s.trim()) &&
+  arr.length !== 0;
 
 adminRouter.get("/about", verifyAdmin, async (req, res) => {
   try {
@@ -224,6 +227,128 @@ adminRouter.get("/tweetIds", verifyAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error("Error getting tweet data:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
+// Blog Route
+adminRouter.post("/blog", verifyAdmin, async (req, res) => {
+  try {
+    const { title, excerpt, date, readTime, category, mediumLink } =
+      req.body || {};
+
+    const requiredFields = {
+      title,
+      excerpt,
+      date,
+      readTime,
+      category,
+      mediumLink,
+    };
+
+    const missingFields = Object.entries(requiredFields)
+      .filter(([key, value]) => !value)
+      .map(([key]) => key);
+
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Missing required fields: ${missingFields.join(", ")}`,
+      });
+    }
+
+    const blog = await Blog.create({
+      title,
+      excerpt,
+      date,
+      readTime,
+      category,
+      mediumLink,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "New blog added successfully",
+      data: blog,
+    });
+  } catch (error) {
+    console.error("Error creating blog: ", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
+adminRouter.patch("/blog/:id", verifyAdmin, async (req, res) => {
+  try {
+    const { title, excerpt, date, readTime, category, mediumLink } =
+      req.body || {};
+
+    const { id } = req.params;
+    const updateData = {};
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid blog ID",
+      });
+    }
+
+    if (title) updateData.title = title;
+    if (excerpt) updateData.excerpt = excerpt;
+    if (date) updateData.date = date;
+    if (readTime) updateData.readTime = readTime;
+    if (category) updateData.category = category;
+    if (mediumLink) updateData.mediumLink = mediumLink;
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid fields provided to update",
+      });
+    }
+
+    const updatedBlog = await Blog.findByIdAndUpdate(id, updateData, {
+      new: true,
+    });
+
+    if (!updatedBlog) {
+      return res.status(404).json({
+        success: false,
+        message: "Blog data not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Blog data updated successfully",
+      data: updatedBlog,
+    });
+  } catch (error) {
+    console.error("Error updating blog data: ", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
+adminRouter.get("/blog", verifyAdmin, async (req, res) => {
+  try {
+    const blogs = await Blog.find({}).lean();
+
+    return res.status(200).json({
+      success: true,
+      message:
+        blogs.length > 0 ? "Blogs fetched successfully" : "No blogs found",
+      data: blogs,
+    });
+  } catch (error) {
+    console.error("Error getting blogs data: ", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
