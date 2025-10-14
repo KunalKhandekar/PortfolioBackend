@@ -11,6 +11,7 @@ const validateStringArray = (arr) =>
   !arr.some((s) => typeof s !== "string" || !s.trim()) &&
   arr.length !== 0;
 
+// About Routes
 adminRouter.get("/about", verifyAdmin, async (req, res) => {
   try {
     const ownerData = await Owner.findById(_id).lean();
@@ -172,7 +173,7 @@ adminRouter.patch("/about", verifyAdmin, async (req, res) => {
   }
 });
 
-// For tweetIds Update
+// Twitter Routes
 adminRouter.patch("/tweetIds", verifyAdmin, async (req, res) => {
   try {
     const { tweetIds } = req.body || {};
