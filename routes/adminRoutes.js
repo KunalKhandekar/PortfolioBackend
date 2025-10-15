@@ -1,9 +1,14 @@
 import { Router } from "express";
+import mongoose from "mongoose";
 import { verifyAdmin } from "../middlewares/checkAuth.js";
-import Owner from "../models/ownerModel.js";
-import mongoose, { Schema } from "mongoose";
 import Blog from "../models/BlogModel.js";
 import Experience from "../models/ExperienceModel.js";
+import Owner from "../models/ownerModel.js";
+import {
+  deleteS3Object,
+  generatePreSignedUploadURL,
+} from "../services/s3Services.js";
+import path from "path";
 
 const adminRouter = Router();
 const _id = process.env.ADMIN_ID;
@@ -432,6 +437,7 @@ adminRouter.post("/experience", verifyAdmin, async (req, res) => {
 
 adminRouter.patch("/experience/:id", verifyAdmin, async (req, res) => {
   try {
+    const { id } = req.params;
     const {
       companyLogo,
       title,
@@ -442,9 +448,6 @@ adminRouter.patch("/experience/:id", verifyAdmin, async (req, res) => {
       technologiesUsed,
     } = req.body || {};
 
-    const { id } = req.params;
-    const updateData = {};
-
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -452,13 +455,31 @@ adminRouter.patch("/experience/:id", verifyAdmin, async (req, res) => {
       });
     }
 
-    if (companyLogo) updateData.companyLogo = companyLogo;
+    const experience = await Experience.findById(id);
+    if (!experience) {
+      return res.status(404).json({
+        success: false,
+        message: "Experience not found",
+      });
+    }
+
+    const updateData = {};
+
+    if (companyLogo) {
+      if (experience.companyLogo) {
+        const keyParts = experience.companyLogo.split("/");
+        const oldKey = keyParts[keyParts.length - 1];
+        await deleteS3Object({ Key: oldKey });
+      }
+      updateData.companyLogo = companyLogo;
+    }
+
     if (title) updateData.title = title;
     if (location) updateData.location = location;
     if (timeLine) updateData.timeLine = timeLine;
-    if (isCurrent !== undefined && isCurrent !== null) {
+    if (isCurrent !== undefined && isCurrent !== null)
       updateData.isCurrent = isCurrent;
-    }
+
     if (keyAchievements) {
       if (!validateStringArray(keyAchievements)) {
         return res.status(400).json({
@@ -468,6 +489,7 @@ adminRouter.patch("/experience/:id", verifyAdmin, async (req, res) => {
       }
       updateData.keyAchievements = keyAchievements;
     }
+
     if (technologiesUsed) {
       if (!validateStringArray(technologiesUsed)) {
         return res.status(400).json({
@@ -488,25 +510,16 @@ adminRouter.patch("/experience/:id", verifyAdmin, async (req, res) => {
     const updatedExperience = await Experience.findByIdAndUpdate(
       id,
       updateData,
-      {
-        new: true,
-      }
+      { new: true }
     );
-
-    if (!updatedExperience) {
-      return res.status(404).json({
-        success: false,
-        message: "Experience data not found",
-      });
-    }
 
     return res.status(200).json({
       success: true,
-      message: "Experience data updated successfully",
+      message: "Experience updated successfully",
       data: updatedExperience,
     });
   } catch (error) {
-    console.error("Error updating experience data: ", error);
+    console.error("Error updating experience: ", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -528,6 +541,48 @@ adminRouter.get("/experience", async (req, res) => {
     });
   } catch (error) {
     console.error("Error getting experience data: ", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
+// S3 Routes
+adminRouter.post("/getS3UploadURL", async (req, res) => {
+  try {
+    const { fileName, contentType } = req.body || {};
+
+    if (!fileName || !contentType) {
+      return res.status(400).json({
+        success: false,
+        message: "fileName and contentType are required",
+      });
+    }
+
+    const allowedTypes = ["image/png", "image/jpeg", "image/webp"];
+    if (!allowedTypes.includes(contentType)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid file type" });
+    }
+
+    const s3ObjectKey = `${crypto.randomUUID()}${path.extname(fileName)}`;
+
+    const preSignedUploadURL = await generatePreSignedUploadURL({
+      ContentType: contentType,
+      Key: s3ObjectKey,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        url: preSignedUploadURL,
+        s3ObjectKey,
+      },
+    });
+  } catch (error) {
+    console.error("Error creating pre-signed upload URL: ", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
