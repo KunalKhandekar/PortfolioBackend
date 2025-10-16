@@ -9,6 +9,7 @@ import {
   generatePreSignedUploadURL,
 } from "../services/s3Services.js";
 import path from "path";
+import Achievement from "../models/AchievementModel.js";
 
 const adminRouter = Router();
 const _id = process.env.ADMIN_ID;
@@ -561,6 +562,212 @@ adminRouter.get("/experience", async (req, res) => {
     });
   } catch (error) {
     console.error("Error getting experience data: ", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
+// Achievements Route
+adminRouter.post("/achievement", verifyAdmin, async (req, res) => {
+  try {
+    const {
+      companyLogo,
+      title,
+      timeLine,
+      descriptionTitle,
+      descriptionPoints,
+      images,
+    } = req.body || {};
+
+    const requiredFields = {
+      companyLogo,
+      title,
+      timeLine,
+      descriptionTitle,
+      descriptionPoints,
+      images,
+    };
+
+    const missingFields = Object.entries(requiredFields)
+      .filter(
+        ([_, value]) => value === undefined || value === null || value === ""
+      )
+      .map(([key]) => key);
+
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Missing required fields: ${missingFields.join(", ")}`,
+      });
+    }
+
+    if (!validateStringArray(descriptionPoints)) {
+      return res.status(400).json({
+        success: false,
+        message: "descriptionPoints must be an array of non-empty strings",
+      });
+    }
+
+    if (!validateStringArray(images)) {
+      return res.status(400).json({
+        success: false,
+        message: "images must be an array of links",
+      });
+    }
+
+    if (images.length > 2) {
+      return res.status(400).json({
+        success: false,
+        message: "Maximum 2 images per achievement",
+      });
+    }
+
+    const experience = await Achievement.create({
+      companyLogo,
+      title,
+      timeLine,
+      descriptionTitle,
+      descriptionPoints,
+      images,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "New achievement added successfully",
+      data: experience,
+    });
+  } catch (error) {
+    console.error("Error creating achievement : ", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
+adminRouter.patch("/achievement/:id", verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      companyLogo,
+      title,
+      timeLine,
+      descriptionTitle,
+      descriptionPoints,
+      images,
+    } = req.body || {};
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid achievement ID",
+      });
+    }
+
+    const achievement = await Achievement.findById(id);
+    if (!achievement) {
+      return res.status(404).json({
+        success: false,
+        message: "Achievement not found",
+      });
+    }
+
+    const updateData = {};
+
+    if (companyLogo) {
+      if (achievement.companyLogo) {
+        const keyParts = achievement.companyLogo.split("/");
+        const oldKey = keyParts[keyParts.length - 1];
+        await deleteS3Object({ Key: oldKey });
+      }
+      updateData.companyLogo = companyLogo;
+    }
+
+    if (title) updateData.title = title;
+    if (timeLine) updateData.timeLine = timeLine;
+    if (descriptionTitle) updateData.descriptionTitle = descriptionTitle;
+    if (descriptionPoints) {
+      if (!validateStringArray(descriptionPoints)) {
+        return res.status(400).json({
+          success: false,
+          message: "descriptionPoints must be an array of non-empty strings",
+        });
+      }
+      updateData.descriptionPoints = descriptionPoints;
+    }
+
+    if (images) {
+      if (!validateStringArray(images)) {
+        return res.status(400).json({
+          success: false,
+          message: "images must be an array of non-empty strings",
+        });
+      }
+
+      if (images.length > 2) {
+        return res.status(400).json({
+          success: false,
+          message: "Maximum 2 images per achievement",
+        });
+      }
+
+      const oldImages = achievement.images || [];
+
+      const imagesToDelete = oldImages.filter((img) => !images.includes(img));
+
+      console.log("imagesToDelete: ", imagesToDelete);
+
+      for (const imgUrl of imagesToDelete) {
+        const key = imgUrl.split("/").pop();
+        await deleteS3Object({ Key: key });
+      }
+
+      updateData.images = images;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid fields provided to update",
+      });
+    }
+
+    const updatedAchievement = await Achievement.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Achievement updated successfully",
+      data: updatedAchievement,
+    });
+  } catch (error) {
+    console.error("Error updating achievement: ", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
+adminRouter.get("/achievement", async (req, res) => {
+  try {
+    const achievements = await Achievement.find({}).lean();
+
+    return res.status(200).json({
+      success: true,
+      message:
+        achievements.length > 0
+          ? "Achievement data fetched successfully"
+          : "No achievement data found",
+      data: achievements,
+    });
+  } catch (error) {
+    console.error("Error getting achievement data: ", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
