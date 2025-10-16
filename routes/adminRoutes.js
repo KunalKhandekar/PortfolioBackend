@@ -10,6 +10,12 @@ import {
 } from "../services/s3Services.js";
 import path from "path";
 import Achievement from "../models/AchievementModel.js";
+import Project from "../models/ProjectModel.js";
+import {
+  projectCreateSchema,
+  projectUpdateSchema,
+} from "../validators/projectValidators.js";
+import { validateRequest } from "../middlewares/validateRequest.js";
 
 const adminRouter = Router();
 const _id = process.env.ADMIN_ID;
@@ -624,7 +630,7 @@ adminRouter.post("/achievement", verifyAdmin, async (req, res) => {
       });
     }
 
-    const experience = await Achievement.create({
+    const achievement = await Achievement.create({
       companyLogo,
       title,
       timeLine,
@@ -636,7 +642,7 @@ adminRouter.post("/achievement", verifyAdmin, async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "New achievement added successfully",
-      data: experience,
+      data: achievement,
     });
   } catch (error) {
     console.error("Error creating achievement : ", error);
@@ -716,8 +722,6 @@ adminRouter.patch("/achievement/:id", verifyAdmin, async (req, res) => {
       const oldImages = achievement.images || [];
 
       const imagesToDelete = oldImages.filter((img) => !images.includes(img));
-
-      console.log("imagesToDelete: ", imagesToDelete);
 
       for (const imgUrl of imagesToDelete) {
         const key = imgUrl.split("/").pop();
@@ -816,5 +820,111 @@ adminRouter.post("/getS3UploadURL", async (req, res) => {
     });
   }
 });
+
+// Projects Route
+adminRouter.post(
+  "/project",
+  validateRequest(projectCreateSchema),
+  async (req, res) => {
+    try {
+      const project = await Project.create(req.body);
+      return res.status(200).json({
+        success: true,
+        message: "New project added successfully",
+        data: project,
+      });
+    } catch (error) {
+      return res
+        .status(500)
+        .json({ success: false, message: "Internal server error" });
+    }
+  }
+);
+
+adminRouter.get("/project", async (req, res) => {
+  try {
+    const projects = await Project.find({}).lean();
+
+    return res.status(200).json({
+      success: true,
+      message:
+        projects.length > 0
+          ? "Project data fetched successfully"
+          : "No project data found",
+      data: projects,
+    });
+  } catch (error) {
+    console.error("Error getting project data: ", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
+adminRouter.patch(
+  "/project/:id",
+  validateRequest(projectUpdateSchema),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid project ID",
+        });
+      }
+
+      if (Object.entries(req.body).length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "No valid fields provided to update",
+        });
+      }
+
+      const oldProject = await Project.findById(id);
+      if (!oldProject) {
+        return res.status(404).json({
+          success: false,
+          message: "Project not found",
+        });
+      }
+
+      // Handle Image Deletion only if `images` is included in body
+      if (req.body.images) {
+        const oldImages = oldProject.images || [];
+        const newImages = req.body.images || [];
+
+        const imagesToDelete = oldImages.filter(
+          (img) => !newImages.includes(img)
+        );
+
+        const res = await Promise.all(
+          imagesToDelete.map((imgUrl) => {
+            const key = imgUrl.split("/").pop();
+            return deleteS3Object({ Key: key });
+          })
+        );
+      }
+
+      const updatedProject = await Project.findByIdAndUpdate(id, req.body, {
+        new: true,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Project updated successfully",
+        data: updatedProject,
+      });
+    } catch (error) {
+      console.error("Error updating project:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+);
 
 export default adminRouter;
