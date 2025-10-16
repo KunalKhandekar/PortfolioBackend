@@ -39,6 +39,7 @@ adminRouter.get("/about", verifyAdmin, async (req, res) => {
         description: ownerData.description,
         currentFocus: ownerData.currentFocus,
         skills: ownerData.skills,
+        profilePic: ownerData.profilePic,
       },
     });
   } catch (error) {
@@ -53,6 +54,7 @@ adminRouter.get("/about", verifyAdmin, async (req, res) => {
 adminRouter.post("/about", verifyAdmin, async (req, res) => {
   try {
     const {
+      profilePic,
       name,
       role,
       miniDescription,
@@ -63,6 +65,7 @@ adminRouter.post("/about", verifyAdmin, async (req, res) => {
     } = req.body || {};
 
     const requiredFields = {
+      profilePic,
       name,
       role,
       miniDescription,
@@ -98,6 +101,7 @@ adminRouter.post("/about", verifyAdmin, async (req, res) => {
     }
 
     const owner = await Owner.create({
+      profilePic,
       name,
       role,
       miniDescription,
@@ -123,11 +127,34 @@ adminRouter.post("/about", verifyAdmin, async (req, res) => {
 
 adminRouter.patch("/about", verifyAdmin, async (req, res) => {
   try {
-    const { name, role, mainDescription, description, currentFocus, skills } =
-      req.body || {};
+    const {
+      profilePic,
+      name,
+      role,
+      mainDescription,
+      description,
+      currentFocus,
+      skills,
+    } = req.body || {};
+    const ownerData = await Owner.findById(_id).lean();
+
+    if (!ownerData) {
+      return res.status(404).json({
+        success: false,
+        message: "Owner data not found",
+      });
+    }
 
     const updateData = {};
 
+    if (profilePic) {
+      if (ownerData.profilePic) {
+        const keyParts = ownerData.profilePic.split("/");
+        const oldKey = keyParts[keyParts.length - 1];
+        await deleteS3Object({ Key: oldKey });
+      }
+      updateData.profilePic = profilePic;
+    }
     if (name) updateData.name = name;
     if (role) updateData.role = role;
     if (mainDescription) updateData.miniDescription = mainDescription;
@@ -157,13 +184,6 @@ adminRouter.patch("/about", verifyAdmin, async (req, res) => {
     const updatedOwner = await Owner.findByIdAndUpdate(_id, updateData, {
       new: true,
     }).lean();
-
-    if (!updatedOwner) {
-      return res.status(404).json({
-        success: false,
-        message: "Owner data not found",
-      });
-    }
 
     return res.status(200).json({
       success: true,
