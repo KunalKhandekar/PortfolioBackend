@@ -100,7 +100,7 @@ export const projectCreateSchema = z.object({
       {
         error: (issue) => {
           if (issue.input === undefined) return "tags array is required";
-          return "tags must be an array of objects containing a topic"
+          return "tags must be an array of objects containing a topic";
         },
       }
     )
@@ -145,7 +145,7 @@ export const projectCreateSchema = z.object({
         error: (issue) => {
           const path = issue.path.join(".");
           if (issue.input === undefined) return `${path} array is required`;
-          return "developmentSummary must be an array of objects containing title and value"
+          return "developmentSummary must be an array of objects containing title and value";
         },
       }
     )
@@ -214,13 +214,22 @@ export const projectCreateSchema = z.object({
         error: (issue) => {
           const path = issue.path.join(".");
           if (issue.input === undefined) return `${path} array is required`;
-          return "languagesUsed must be an array of object containing name, percentage and color"
+          return "languagesUsed must be an array of object containing name, percentage and color";
         },
       }
     )
     .nonempty(
       "languagesUsed must be an array of object containing name, percentage and color"
     ),
+  stack: z
+    .string({
+      error: (issue) => {
+        if (issue.input === undefined) return "stack is required";
+        return "stack must be a string";
+      },
+    })
+    .trim()
+    .min(1, "stack cannot be empty"),
 });
 
 export const projectUpdateSchema = projectCreateSchema.partial();

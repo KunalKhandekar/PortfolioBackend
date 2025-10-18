@@ -54,6 +54,11 @@ const ProjectSchema = new Schema(
         color: { type: String, required: true },
       },
     ],
+    stack: {
+      type: String,
+      required: true,
+      trim: true,
+    },
   },
   {
     timestamps: true,

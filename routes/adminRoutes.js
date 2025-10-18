@@ -47,6 +47,7 @@ adminRouter.get("/about", verifyAdmin, async (req, res) => {
         currentFocus: ownerData.currentFocus,
         skills: ownerData.skills,
         profilePic: ownerData.profilePic,
+        aboutReadme: ownerData.aboutReadme,
       },
     });
   } catch (error) {
@@ -69,6 +70,7 @@ adminRouter.post("/about", verifyAdmin, async (req, res) => {
       currentFocus,
       skills,
       tweetIds,
+      aboutReadme,
     } = req.body || {};
 
     const requiredFields = {
@@ -80,6 +82,7 @@ adminRouter.post("/about", verifyAdmin, async (req, res) => {
       currentFocus,
       skills,
       tweetIds,
+      aboutReadme,
     };
 
     const missingFields = Object.entries(requiredFields)
@@ -116,6 +119,7 @@ adminRouter.post("/about", verifyAdmin, async (req, res) => {
       currentFocus,
       skills,
       tweetIds,
+      aboutReadme,
     });
 
     return res.status(200).json({
@@ -142,6 +146,7 @@ adminRouter.patch("/about", verifyAdmin, async (req, res) => {
       description,
       currentFocus,
       skills,
+      aboutReadme,
     } = req.body || {};
     const ownerData = await Owner.findById(_id).lean();
 
@@ -180,6 +185,8 @@ adminRouter.patch("/about", verifyAdmin, async (req, res) => {
       }
       updateData.skills = skills;
     }
+
+    if (aboutReadme) updateData.aboutReadme = aboutReadme;
 
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({
@@ -900,7 +907,7 @@ adminRouter.patch(
           (img) => !newImages.includes(img)
         );
 
-        const res = await Promise.all(
+        await Promise.all(
           imagesToDelete.map((imgUrl) => {
             const key = imgUrl.split("/").pop();
             return deleteS3Object({ Key: key });

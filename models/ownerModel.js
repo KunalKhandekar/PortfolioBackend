@@ -40,6 +40,11 @@ const ownerSchema = new Schema(
       type: [String],
       default: [],
     },
+    aboutReadme: {
+      type: String,
+      required: true,
+      trim: true,
+    },
   },
   {
     timestamps: true,
