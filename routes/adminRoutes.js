@@ -1,21 +1,22 @@
 import { Router } from "express";
 import mongoose from "mongoose";
+import path from "path";
 import { verifyAdmin } from "../middlewares/checkAuth.js";
+import { validateRequest } from "../middlewares/validateRequest.js";
+import Achievement from "../models/AchievementModel.js";
 import Blog from "../models/BlogModel.js";
 import Experience from "../models/ExperienceModel.js";
 import Owner from "../models/ownerModel.js";
+import Project from "../models/ProjectModel.js";
 import {
   deleteS3Object,
   generatePreSignedUploadURL,
 } from "../services/s3Services.js";
-import path from "path";
-import Achievement from "../models/AchievementModel.js";
-import Project from "../models/ProjectModel.js";
 import {
   projectCreateSchema,
   projectUpdateSchema,
 } from "../validators/projectValidators.js";
-import { validateRequest } from "../middlewares/validateRequest.js";
+import { sendEmail } from "../services/resend.js";
 
 const adminRouter = Router();
 const _id = process.env.ADMIN_ID;
@@ -25,7 +26,7 @@ const validateStringArray = (arr) =>
   arr.length !== 0;
 
 // About Routes
-adminRouter.get("/about", verifyAdmin, async (req, res) => {
+adminRouter.get("/about", async (req, res) => {
   try {
     const ownerData = await Owner.findById(_id).lean();
 
@@ -251,7 +252,7 @@ adminRouter.patch("/tweetIds", verifyAdmin, async (req, res) => {
   }
 });
 
-adminRouter.get("/tweetIds", verifyAdmin, async (req, res) => {
+adminRouter.get("/tweetIds", async (req, res) => {
   try {
     const tweetIds = await Owner.findById(_id).select("tweetIds").lean();
 
@@ -378,7 +379,7 @@ adminRouter.patch("/blog/:id", verifyAdmin, async (req, res) => {
   }
 });
 
-adminRouter.get("/blog", verifyAdmin, async (req, res) => {
+adminRouter.get("/blog", async (req, res) => {
   try {
     const blogs = await Blog.find({}).lean();
 
@@ -869,6 +870,32 @@ adminRouter.get("/project", async (req, res) => {
   }
 });
 
+adminRouter.get("/project/:navLink", async (req, res) => {
+  const { navLink } = req.params || {};
+  try {
+    const project = await Project.findOne({ navLink }).lean();
+
+    if (!project) {
+      return res.status(400).json({
+        success: false,
+        message: "Project not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Project data fetched successfully",
+      data: project,
+    });
+  } catch (error) {
+    console.error("Error getting project data: ", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
 adminRouter.patch(
   "/project/:id",
   validateRequest(projectUpdateSchema),
@@ -933,5 +960,181 @@ adminRouter.patch(
     }
   }
 );
+
+// Overview Content
+adminRouter.get("/overview", async (req, res) => {
+  try {
+    const ownerData = await Owner.findById(_id).select("aboutReadme").lean();
+
+    if (!ownerData) {
+      return res.status(404).json({
+        success: "false",
+        message: "Owner data not found",
+      });
+    }
+
+    const overviewReadmeContent = ownerData.aboutReadme;
+    const projects = await Project.find({})
+      .select("name navLink description stack createdAt")
+      .sort({ createdAt: -1 })
+      .limit(3)
+      .lean();
+    const blogs = await Blog.find({}).sort({ createdAt: -1 }).limit(3).lean();
+
+    return res.status(200).json({
+      success: true,
+      message: "Overview data fetched",
+      data: {
+        readmeContent: overviewReadmeContent,
+        pinnedContent: [
+          ...projects?.map((proj) => ({
+            type: "repo",
+            title: proj.name,
+            description: proj.description,
+            stack: proj.stack,
+            readTime: null,
+            link: `/projects/${proj.navLink}`,
+          })),
+          ...blogs?.map((blog) => ({
+            type: "blog",
+            title: blog.title,
+            description: blog.excerpt,
+            stack: null,
+            readTime: blog.readTime,
+            link: blog.mediumLink,
+          })),
+        ],
+      },
+    });
+  } catch (error) {
+    console.error("Error getting overview data: ", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
+// Project Listing
+adminRouter.get("/projectsList", async (req, res) => {
+  const projects = await Project.find({}).lean();
+  res.status(200).json({
+    success: true,
+    data: projects.map((proj) => ({
+      title: proj.name,
+      navLink: proj.navLink,
+      description: proj.description,
+      stack: proj.stack,
+      liveLink: proj.liveLink,
+      gitHubLink: proj.gitHubLink,
+      image: proj.images[0],
+      languages: proj.languagesUsed.map((lang) => lang.name),
+    })),
+  });
+});
+
+// Search
+adminRouter.get("/search", async (req, res) => {
+  const projects = await Project.find({}).lean();
+  const blogs = await Blog.find({}).lean();
+
+  res.status(200).json({
+    success: true,
+    data: [
+      {
+        key: "Projects",
+        value: projects.map((proj) => ({
+          id: proj._id,
+          name: proj.name,
+          navLink: `/projects/${proj.navLink}`,
+        })),
+      },
+      {
+        key: "Blogs",
+        value: blogs.map((blog) => ({
+          id: blog._id,
+          name: blog.title,
+          navLink: blog.mediumLink,
+        })),
+      },
+      {
+        key: "Pages",
+        value: [
+          { id: 1, name: "Overview", navLink: "/" },
+          { id: 2, name: "Projects", navLink: "/projects" },
+          { id: 3, name: "Achievements", navLink: "/achievements" },
+          { id: 4, name: "Experience", navLink: "/experience" },
+          { id: 5, name: "Blogs", navLink: "/blogs" },
+          { id: 6, name: "Consistency", navLink: "/consistency" },
+          { id: 7, name: "Get in touch", navLink: "/contact" },
+        ],
+      },
+    ],
+  });
+});
+
+// Languages sorting
+adminRouter.get("/languages", async (req, res) => {
+  try {
+    const languages = await Project.distinct("languagesUsed.name");
+
+    const formatted = [
+      { value: "All" },
+      ...languages.map((name) => ({ value: name })),
+    ];
+
+    return res.status(200).json({
+      success: true,
+      data: formatted,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Contact form
+adminRouter.post("/contact-form", async (req, res) => {
+  try {
+    const { name, email, message } = req.body || {};
+
+    // Basic validation
+    if (!name || !email || !message) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required",
+      });
+    }
+
+    // Simple email regex validation
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid email address",
+      });
+    }
+
+    // Send email
+    const result = await sendEmail({ name, email, message });
+
+    if (!result || result?.error) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to send message, please try again later",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Message sent successfully!",
+    });
+  } catch (error) {
+    console.error("Error sending email:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong, please try again later",
+    });
+  }
+});
 
 export default adminRouter;

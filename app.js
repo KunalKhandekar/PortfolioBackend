@@ -6,12 +6,20 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 
 const app = express();
+
+const allowedOrigins = process.env.FRONTEND_URLS.split(",");
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error("Not allowed by CORS"), false);
+    },
     credentials: true,
   })
 );
+
 app.use(express.json());
 app.use(cookieParser(process.env.COOKIE_SECRECT));
 
