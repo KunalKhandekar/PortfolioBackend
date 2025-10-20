@@ -1,12 +1,14 @@
 import jwt from "jsonwebtoken";
+import { ApiResponse } from "../utils/apiResponse.js";
+import { StatusCodes } from "http-status-codes";
 
 export const loginController = async (req, res) => {
   const { email, password } = req.body || {};
 
   if (!email || !password) {
-    return res.status(404).json({
-      success: false,
+    return ApiResponse.error(res, null, {
       message: "Email and password both fields are required",
+      status: StatusCodes.BAD_REQUEST,
     });
   }
 
@@ -17,29 +19,40 @@ export const loginController = async (req, res) => {
     const sessionID = jwt.sign({ role: "admin" }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
-    const sessionExpiry = 7 * 24 * 60 * 60 * 1000;
+
     res.cookie("admin_token", sessionID, {
       httpOnly: true,
       signed: true,
-      maxAge: sessionExpiry,
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       sameSite: "lax",
     });
 
-    return res
-      .status(200)
-      .json({ success: true, message: "Logged in successfully" });
+    return ApiResponse.success(res, {
+      message: "Logged in successfully",
+      status: StatusCodes.OK,
+    });
   }
 
-  return res
-    .status(401)
-    .json({ success: false, message: "Invalid credentials !" });
+  return ApiResponse.error(res, null, {
+    message: "Invalid credentials!",
+    status: StatusCodes.UNAUTHORIZED,
+  });
 };
 
 export const logoutController = (req, res) => {
-  const token = req.signedCookies.admin_token;
+  const token = req.signedCookies?.admin_token;
+
   if (!token) {
-    return res.status(401).json({ success: false, message: "Not logged in" });
+    return ApiResponse.error(res, null, {
+      message: "Not logged in",
+      status: StatusCodes.UNAUTHORIZED,
+    });
   }
+
   res.clearCookie("admin_token");
-  return res.json({ success: true, message: "Logged out" });
+
+  return ApiResponse.success(res, {
+    message: "Logged out",
+    status: StatusCodes.OK,
+  });
 };

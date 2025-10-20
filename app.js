@@ -4,6 +4,7 @@ import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import cookieParser from "cookie-parser";
 import cors from "cors";
+import { logger } from "./utils/logger.js";
 
 const app = express();
 
@@ -23,6 +24,18 @@ app.use(
 
 app.use(express.json());
 app.use(cookieParser(process.env.COOKIE_SECRECT));
+
+app.use((req, res, next) => {
+  const start = process.hrtime.bigint();
+  res.on("finish", () => {
+    const ms = Number(process.hrtime.bigint() - start) / 1e6;
+    logger.info(
+      `${req.method} ${req.originalUrl} ${res.statusCode} ${ms.toFixed(1)}ms`,
+      { ip: req.ip, userAgent: req.get("user-agent"), origin: req.get("origin") }
+    );
+  });
+  next();
+});
 
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
