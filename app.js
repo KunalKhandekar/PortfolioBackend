@@ -8,6 +8,7 @@ import cors from "cors";
 const app = express();
 
 const allowedOrigins = process.env.FRONTEND_URLS.split(",");
+
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -28,7 +29,7 @@ app.use("/api/admin", adminRoutes);
 
 app.get("/", (req, res) => {
   res.json({ message: "Hello World !!" });
-});
+}); 
 
 mongoose
   .connect(process.env.MONGODB_URI)

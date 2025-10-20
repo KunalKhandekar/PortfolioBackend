@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 
 export const loginController = async (req, res) => {
   const { email, password } = req.body || {};
+
   if (!email || !password) {
     return res.status(404).json({
       success: false,
@@ -35,6 +36,10 @@ export const loginController = async (req, res) => {
 };
 
 export const logoutController = (req, res) => {
+  const token = req.signedCookies.admin_token;
+  if (!token) {
+    return res.status(401).json({ success: false, message: "Not logged in" });
+  }
   res.clearCookie("admin_token");
   return res.json({ success: true, message: "Logged out" });
 };
