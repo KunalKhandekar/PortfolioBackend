@@ -29,13 +29,11 @@ This backend API serves as the core data layer for the portfolio ecosystem, prov
 
 - **RESTful API Design** – Clean and consistent API endpoints
 - **JWT Authentication** – Secure token-based authentication system
-- **CRUD Operations** – Complete Create, Read, Update, Delete functionality
+- **CRUD Operations** – Complete Create, Read, Update functionality
 - **Data Validation** – Input validation and sanitization
 - **Error Handling** – Comprehensive error handling middleware
 - **CORS Configuration** – Secure cross-origin resource sharing
 - **Database Models** – Well-structured MongoDB schemas
-- **API Documentation** – Clear endpoint documentation
-- **Environment-based Configuration** – Separate configs for development and production
 
 ## Deployment
 
